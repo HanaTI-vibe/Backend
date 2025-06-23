@@ -1,0 +1,70 @@
+# Common settings for all profiles
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: l2q
+  # --- DataSource Settings ---
+  # These values will be sourced from environment variables.
+  # For local dev, create a .env file. For prod, use Railway's env vars.
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+---
+# Settings for the 'dev' profile (default)
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+logging:
+  level:
+    org:
+      springframework:
+        web: DEBUG
+      hibernate:
+        SQL: DEBUG
+        type:
+          descriptor:
+            sql:
+              BasicBinder: TRACE
+
+---
+# Settings for the 'prod' profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+  # In production, we just want to override logging and sql formatting
+  jpa:
+    show-sql: false
+  logging:
+    level:
+      org:
+        springframework:
+          web: INFO
+        hibernate:
+          SQL: WARN
