@@ -156,4 +156,95 @@ public class WebSocketController {
         String roomId = (String) payload.get("roomId");
         messagingTemplate.convertAndSend("/topic/room/" + roomId + "/chat", payload);
     }
+
+    // Socket.IO 스타일 HTTP 엔드포인트 추가
+    @org.springframework.web.bind.annotation.PostMapping("/api/socket/chat")
+    public void socketChat(@org.springframework.web.bind.annotation.RequestBody Map<String, Object> payload) {
+        String roomId = (String) payload.get("roomId");
+        String userId = (String) payload.get("userId");
+        String userName = (String) payload.get("userName");
+        String message = (String) payload.get("message");
+        
+        logger.info("Socket.IO 스타일 채팅: 룸={}, 사용자={}, 메시지={}", roomId, userName, message);
+        
+        Map<String, Object> chatMessage = Map.of(
+            "type", "chat",
+            "userId", userId,
+            "userName", userName,
+            "message", message,
+            "timestamp", System.currentTimeMillis()
+        );
+        
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, chatMessage);
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/api/socket/join")
+    public void socketJoin(@org.springframework.web.bind.annotation.RequestBody Map<String, String> payload) {
+        String roomId = payload.get("roomId");
+        String userId = payload.get("userId");
+        String userName = payload.get("userName");
+        
+        logger.info("Socket.IO 스타일 입장: 룸={}, 사용자={}", roomId, userName);
+        
+        // 참가자 추가
+        roomService.addParticipant(roomId, userId, userName, "http-" + userId);
+        
+        // 참가자 목록 업데이트
+        List<Participant> participants = roomService.getRoomParticipants(roomId);
+        
+        // 시스템 메시지 생성
+        Map<String, Object> systemMessage = Map.of(
+            "type", "system",
+            "message", userName + "님이 입장했습니다.",
+            "timestamp", System.currentTimeMillis()
+        );
+        
+        // 참가자 목록 업데이트 메시지
+        Map<String, Object> participantsUpdate = Map.of(
+            "type", "participants-update",
+            "participants", participants
+        );
+        
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, systemMessage);
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, participantsUpdate);
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/api/socket/leave")
+    public void socketLeave(@org.springframework.web.bind.annotation.RequestBody Map<String, String> payload) {
+        String roomId = payload.get("roomId");
+        String userId = payload.get("userId");
+        String userName = payload.get("userName");
+        
+        logger.info("Socket.IO 스타일 퇴장: 룸={}, 사용자={}", roomId, userName);
+        
+        // 참가자 제거
+        roomService.removeParticipant(roomId, userId);
+        
+        // 참가자 목록 업데이트
+        List<Participant> participants = roomService.getRoomParticipants(roomId);
+        
+        // 시스템 메시지 생성
+        Map<String, Object> systemMessage = Map.of(
+            "type", "system",
+            "message", userName + "님이 퇴장했습니다.",
+            "timestamp", System.currentTimeMillis()
+        );
+        
+        // 참가자 목록 업데이트 메시지
+        Map<String, Object> participantsUpdate = Map.of(
+            "type", "participants-update",
+            "participants", participants
+        );
+        
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, systemMessage);
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, participantsUpdate);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/socket/messages/{roomId}")
+    public java.util.List<Map<String, Object>> getChatMessages(@org.springframework.web.bind.annotation.PathVariable String roomId) {
+        // 실제로는 데이터베이스에서 메시지를 가져와야 함
+        // 현재는 간단한 테스트용으로 빈 리스트 반환
+        logger.info("채팅 메시지 요청: 룸={}", roomId);
+        return new java.util.ArrayList<>();
+    }
 } 

@@ -165,7 +165,10 @@ public class GeminiService {
         
         prompt.append("- 각 문제는 다음 형식으로 작성해주세요:\n");
         prompt.append("문제1: [문제 내용]\n");
-        prompt.append("선택지: A) [선택지1] B) [선택지2] C) [선택지3] D) [선택지4]\n");
+        prompt.append("유형: [객관식/단답식]\n");
+        if (questionTypes.contains("multiple-choice")) {
+            prompt.append("선택지: A) [선택지1] B) [선택지2] C) [선택지3] D) [선택지4]\n");
+        }
         prompt.append("정답: [정답]\n");
         prompt.append("설명: [정답 설명]\n");
         prompt.append("점수: [점수]\n\n");
@@ -194,14 +197,25 @@ public class GeminiService {
                     }
                     currentQuestion = new Question();
                     currentQuestion.setId("gemini-" + UUID.randomUUID().toString().substring(0, 8));
+                    // 기본값은 객관식으로 설정
                     currentQuestion.setType(Question.QuestionType.MULTIPLE_CHOICE);
                     currentQuestion.setQuestion(line.substring(line.indexOf(":") + 1).trim());
                     currentQuestion.setPoints(1);
+                } else if (line.startsWith("유형:") && currentQuestion != null) {
+                    // 문제 유형 파싱
+                    String typeText = line.substring(line.indexOf(":") + 1).trim().toLowerCase();
+                    if (typeText.contains("단답") || typeText.contains("short")) {
+                        currentQuestion.setType(Question.QuestionType.SHORT_ANSWER);
+                    } else {
+                        currentQuestion.setType(Question.QuestionType.MULTIPLE_CHOICE);
+                    }
                 } else if (line.startsWith("선택지:") && currentQuestion != null) {
-                    // 선택지 파싱 개선
-                    String optionsText = line.substring(line.indexOf(":") + 1).trim();
-                    List<String> options = parseOptions(optionsText);
-                    currentQuestion.setOptions(options);
+                    // 객관식일 때만 선택지 파싱
+                    if (currentQuestion.getType() == Question.QuestionType.MULTIPLE_CHOICE) {
+                        String optionsText = line.substring(line.indexOf(":") + 1).trim();
+                        List<String> options = parseOptions(optionsText);
+                        currentQuestion.setOptions(options);
+                    }
                 } else if (line.startsWith("정답:") && currentQuestion != null) {
                     currentQuestion.setCorrectAnswer(line.substring(line.indexOf(":") + 1).trim());
                 } else if (line.startsWith("설명:") && currentQuestion != null) {
@@ -272,16 +286,33 @@ public class GeminiService {
     private Question generateMockQuestion(int number) {
         Question question = new Question();
         question.setId("mock-" + number);
-        question.setType(Question.QuestionType.MULTIPLE_CHOICE);
-        question.setQuestion("Mock 문제 " + number + ": 이것은 테스트용 문제입니다. 다음 중 올바른 답은 무엇일까요?");
-        question.setOptions(Arrays.asList(
-            "첫 번째 선택지입니다",
-            "두 번째 선택지입니다", 
-            "세 번째 선택지입니다",
-            "네 번째 선택지입니다"
-        ));
-        question.setCorrectAnswer("첫 번째 선택지입니다");
-        question.setExplanation("Mock 문제 " + number + "의 정답 설명입니다. 이 문제는 테스트 목적으로 생성되었습니다.");
+        
+        // 홀수 번호는 객관식, 짝수 번호는 단답식으로 생성
+        if (number % 2 == 1) {
+            question.setType(Question.QuestionType.MULTIPLE_CHOICE);
+            question.setQuestion("Mock 객관식 문제 " + number + ": 이것은 테스트용 객관식 문제입니다. 다음 중 올바른 답은 무엇일까요?");
+            
+            List<String> options = Arrays.asList(
+                "첫 번째 선택지입니다",
+                "두 번째 선택지입니다", 
+                "세 번째 선택지입니다",
+                "네 번째 선택지입니다"
+            );
+            question.setOptions(options);
+            question.setCorrectAnswer("첫 번째 선택지입니다");
+            question.setExplanation("Mock 객관식 문제 " + number + "의 정답 설명입니다. 이 문제는 테스트 목적으로 생성되었습니다.");
+            
+            logger.info("Mock 객관식 문제 {} 생성 - 선택지: {}", number, options);
+        } else {
+            question.setType(Question.QuestionType.SHORT_ANSWER);
+            question.setQuestion("Mock 단답식 문제 " + number + ": 이것은 테스트용 단답식 문제입니다. 정답을 입력하세요.");
+            // 단답식은 선택지 없음
+            question.setCorrectAnswer("정답입니다");
+            question.setExplanation("Mock 단답식 문제 " + number + "의 정답 설명입니다. 이 문제는 테스트 목적으로 생성되었습니다.");
+            
+            logger.info("Mock 단답식 문제 {} 생성", number);
+        }
+        
         question.setPoints(1);
         return question;
     }
