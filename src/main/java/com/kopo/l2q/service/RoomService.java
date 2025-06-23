@@ -206,10 +206,18 @@ public class RoomService {
         if (room != null && room.getCurrentQuestion() < room.getQuestions().size() - 1) {
             int oldQuestion = room.getCurrentQuestion();
             room.setCurrentQuestion(room.getCurrentQuestion() + 1);
-            logger.info("문제 이동: {} -> {}", oldQuestion, room.getCurrentQuestion());
+            
+            // DB에 상태 저장
+            roomRepository.save(room);
+            
+            logger.info("문제 이동: {} -> {} (DB 저장됨)", oldQuestion, room.getCurrentQuestion());
         } else if (room != null) {
             room.setStatus(Room.RoomStatus.FINISHED);
-            logger.info("퀴즈 종료: 룸 {}", roomId);
+            
+            // DB에 상태 저장
+            roomRepository.save(room);
+            
+            logger.info("퀴즈 종료: 룸 {} (DB 저장됨)", roomId);
         }
     }
     

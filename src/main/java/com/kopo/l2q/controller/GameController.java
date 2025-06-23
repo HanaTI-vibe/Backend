@@ -1,5 +1,6 @@
 package com.kopo.l2q.controller;
 
+import com.kopo.l2q.config.CustomWebSocketHandler;
 import com.kopo.l2q.entity.Participant;
 import com.kopo.l2q.entity.Question;
 import com.kopo.l2q.entity.Room;
@@ -24,6 +25,9 @@ public class GameController {
     
     @Autowired
     private RoomService roomService;
+    
+    @Autowired
+    private CustomWebSocketHandler webSocketHandler;
     
     private static final ConcurrentHashMap<String, Boolean> roomLogPrinted = new ConcurrentHashMap<>();
     
@@ -182,6 +186,10 @@ public class GameController {
             response.put("totalQuestions", questions.size());
             response.put("isLastQuestion", room.getCurrentQuestion() == questions.size() - 1);
             
+            // WebSocket으로 모든 클라이언트에게 문제 변경 알림
+            webSocketHandler.broadcastQuestionChange(roomId, room.getCurrentQuestion(), 
+                room.getCurrentQuestion() == questions.size() - 1, room.getTimeLimit());
+            
             logger.info("다음 문제로 이동: {} -> {}", room.getCurrentQuestion() - 1, room.getCurrentQuestion());
             return ResponseEntity.ok(response);
         } else {
@@ -191,10 +199,15 @@ public class GameController {
             response.put("status", "finished");
             response.put("finalScores", roomService.getRoomParticipants(roomId));
             
+            // WebSocket으로 퀴즈 종료 알림
+            webSocketHandler.broadcastQuizFinished(roomId);
+            
             logger.info("퀴즈 종료: {}", roomId);
             return ResponseEntity.ok(response);
         }
     }
+    
+
     
     @GetMapping("/room/{roomId}/current-question")
     public ResponseEntity<Map<String, Object>> getCurrentQuestion(@PathVariable String roomId) {

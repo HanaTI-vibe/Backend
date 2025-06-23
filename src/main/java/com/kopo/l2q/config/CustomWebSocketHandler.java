@@ -173,4 +173,22 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
             logger.error("메시지 직렬화 실패: {}", e.getMessage());
         }
     }
+    
+    // 외부에서 호출할 수 있는 브로드캐스트 메서드
+    public void broadcastQuestionChange(String roomId, int currentQuestion, boolean isLastQuestion, int timeLimit) {
+        logger.info("문제 변경 브로드캐스트: roomId={}, currentQuestion={}, isLastQuestion={}", roomId, currentQuestion, isLastQuestion);
+        broadcastToRoom(roomId, Map.of(
+            "type", "question-change",
+            "currentQuestion", currentQuestion,
+            "isLastQuestion", isLastQuestion,
+            "timeLimit", timeLimit
+        ));
+    }
+    
+    public void broadcastQuizFinished(String roomId) {
+        logger.info("퀴즈 종료 브로드캐스트: roomId={}", roomId);
+        broadcastToRoom(roomId, Map.of(
+            "type", "quiz-finished"
+        ));
+    }
 } 
