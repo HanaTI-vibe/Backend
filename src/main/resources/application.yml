@@ -45,18 +45,24 @@ logging:
   level:
     com:
       kopo:
-        l2q: DEBUG
+        l2q: INFO
     org:
       springframework:
-        web: DEBUG
+        web:
+          servlet: WARN
+        boot: WARN
       hibernate:
-        SQL: DEBUG
+        SQL: WARN
         type:
           descriptor:
             sql:
-              BasicBinder: TRACE
+              BasicBinder: WARN
+    io:
+      socket:
+        io: WARN
+    root: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 ---
 # Development profile
@@ -74,10 +80,10 @@ spring:
     database-platform: org.hibernate.dialect.MySQL8Dialect
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
 ---
 # Production profile
@@ -92,7 +98,7 @@ logging:
   level:
     org:
       springframework:
-        web: INFO
+        web: WARN
       hibernate:
         SQL: WARN
 
