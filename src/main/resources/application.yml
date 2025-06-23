@@ -19,6 +19,17 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
+  # File Upload Configuration
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      enabled: true
+
+# Gemini API Configuration
+gemini:
+  api:
+    key: AIzaSyB_E-kjE1e-61UrzEaqnSfKUXeA94StRjQ
 
 management:
   endpoints:
@@ -29,18 +40,12 @@ management:
     health:
       show-details: always
 
----
-spring:
-  config:
-    activate:
-      on-profile: dev
-  jpa:
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+# Common logging configuration
 logging:
   level:
+    com:
+      kopo:
+        l2q: DEBUG
     org:
       springframework:
         web: DEBUG
@@ -50,14 +55,39 @@ logging:
           descriptor:
             sql:
               BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 ---
+# Development profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+  # MySQL Database Configuration for development
+  datasource:
+    url: jdbc:mysql://root:JGJFUGisfkXffKhmukWJNFnUejafJltL@turntable.proxy.rlwy.net:55965/railway
+    username: root
+    password: JGJFUGisfkXffKhmukWJNFnUejafJltL
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+---
+# Production profile
 spring:
   config:
     activate:
       on-profile: prod
   jpa:
     show-sql: false
+
 logging:
   level:
     org:
