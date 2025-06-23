@@ -138,8 +138,33 @@ public class GameController {
         if (currentQuestion.getType() == Question.QuestionType.MULTIPLE_CHOICE) {
             isCorrect = answer.equals(currentQuestion.getCorrectAnswer());
             points = isCorrect ? currentQuestion.getPoints() : 0;
-        } else {
-            points = (int) (currentQuestion.getPoints() * 0.8);
+        } else if (currentQuestion.getType() == Question.QuestionType.SHORT_ANSWER) {
+            // 단답형 정답 처리
+            if (answer != null && currentQuestion.getCorrectAnswer() != null) {
+                // 대소문자 구분 없이 비교, 앞뒤 공백 제거
+                String userAnswer = answer.trim().toLowerCase();
+                String correctAnswer = currentQuestion.getCorrectAnswer().trim().toLowerCase();
+                
+                // 정확히 일치하는 경우
+                if (userAnswer.equals(correctAnswer)) {
+                    isCorrect = true;
+                    points = currentQuestion.getPoints();
+                } 
+                // 부분 일치하는 경우 (정답이 사용자 답안에 포함되거나 그 반대)
+                else if (userAnswer.contains(correctAnswer) || correctAnswer.contains(userAnswer)) {
+                    isCorrect = true;
+                    points = (int) (currentQuestion.getPoints() * 0.8); // 80% 점수
+                }
+                // 완전히 틀린 경우
+                else {
+                    isCorrect = false;
+                    points = 0;
+                }
+            } else {
+                // 답안이 비어있거나 정답이 설정되지 않은 경우
+                isCorrect = false;
+                points = 0;
+            }
         }
         
         roomService.updateParticipantScore(roomId, userId, points);
