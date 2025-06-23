@@ -43,12 +43,64 @@ public class GameController {
         
         roomService.addParticipant(roomId, userId, userName, "rest-" + userId);
         
+        Room room = roomService.getRoom(roomId);
+        boolean isHost = roomService.isHost(roomId, userId);
+        
         Map<String, Object> response = new HashMap<>();
         response.put("status", "joined");
         response.put("participants", roomService.getRoomParticipants(roomId));
+        response.put("isHost", isHost);
+        response.put("roomStatus", room.getStatus().name());
         
-        logger.info("방 참가 성공: {} (사용자: {})", roomId, userName);
+        logger.info("방 참가 성공: {} (사용자: {}, 방장: {})", roomId, userName, isHost);
         return ResponseEntity.ok(response);
+    }
+    
+    @PostMapping("/start-game")
+    public ResponseEntity<Map<String, Object>> startGame(@RequestBody Map<String, String> request) {
+        logger.info("=== 게임 시작 API 호출 ===");
+        logger.info("요청 데이터: {}", request);
+        
+        String roomId = request.get("roomId");
+        String userId = request.get("userId");
+        
+        if (roomId == null || userId == null) {
+            logger.warn("필수 파라미터 누락");
+            return ResponseEntity.badRequest().build();
+        }
+        
+        boolean success = roomService.startGame(roomId, userId);
+        
+        if (success) {
+            Room room = roomService.getRoom(roomId);
+            List<Question> questions = room.getQuestions();
+            Question firstQuestion = questions.get(0);
+            
+            Map<String, Object> questionData = new HashMap<>();
+            questionData.put("id", firstQuestion.getId());
+            questionData.put("type", firstQuestion.getType().name().toLowerCase());
+            questionData.put("question", firstQuestion.getQuestion());
+            questionData.put("options", firstQuestion.getOptions());
+            questionData.put("points", firstQuestion.getPoints());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "started");
+            response.put("currentQuestion", 0);
+            response.put("question", questionData);
+            response.put("totalQuestions", questions.size());
+            response.put("timeLimit", room.getTimeLimit());
+            response.put("participants", roomService.getRoomParticipants(roomId));
+            
+            logger.info("게임 시작 성공: 룸 {}", roomId);
+            return ResponseEntity.ok(response);
+        } else {
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "failed");
+            response.put("message", "게임을 시작할 수 없습니다.");
+            
+            logger.warn("게임 시작 실패: 룸 {}, 사용자 {}", roomId, userId);
+            return ResponseEntity.badRequest().body(response);
+        }
     }
     
     @PostMapping("/submit-answer")

@@ -128,6 +128,13 @@ public class RoomService {
             Room room = roomCache.get(roomId);
             if (room != null) {
                 participant.setRoom(room);
+                
+                // 첫 번째 참가자를 방장으로 설정
+                if (room.getHostUserId() == null || room.getHostUserId().isEmpty()) {
+                    room.setHostUserId(userId);
+                    roomRepository.save(room); // DB에 방장 정보 저장
+                    logger.info("방장 설정: {} (룸: {})", userName, roomId);
+                }
             }
             
             // DB에 저장
@@ -204,5 +211,37 @@ public class RoomService {
             room.setStatus(Room.RoomStatus.FINISHED);
             logger.info("퀴즈 종료: 룸 {}", roomId);
         }
+    }
+    
+    public boolean isHost(String roomId, String userId) {
+        Room room = roomCache.get(roomId);
+        return room != null && userId.equals(room.getHostUserId());
+    }
+    
+    public boolean startGame(String roomId, String userId) {
+        logger.info("게임 시작 요청: 룸 {}, 사용자 {}", roomId, userId);
+        Room room = roomCache.get(roomId);
+        
+        if (room == null) {
+            logger.warn("룸을 찾을 수 없음: {}", roomId);
+            return false;
+        }
+        
+        if (!userId.equals(room.getHostUserId())) {
+            logger.warn("방장이 아닌 사용자가 게임 시작 시도: {} (방장: {})", userId, room.getHostUserId());
+            return false;
+        }
+        
+        if (room.getStatus() != Room.RoomStatus.WAITING) {
+            logger.warn("대기 상태가 아닌 룸에서 게임 시작 시도: {} (상태: {})", roomId, room.getStatus());
+            return false;
+        }
+        
+        room.setStatus(Room.RoomStatus.ACTIVE);
+        room.setCurrentQuestion(0);
+        roomRepository.save(room); // DB에 상태 저장
+        
+        logger.info("게임 시작됨: 룸 {}", roomId);
+        return true;
     }
 } 

@@ -21,6 +21,7 @@ public class Room {
     private List<Participant> participants;
     private int currentQuestion = 0;
     private int timeLimit;
+    private String hostUserId; // 방장 사용자 ID
     private LocalDateTime createdAt;
     private boolean isMock;
     @Enumerated(EnumType.STRING)
