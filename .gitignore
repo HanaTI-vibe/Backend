@@ -39,3 +39,4 @@ out/
 # Environment variables
 .env
 !/.env.example
+application-dev.yml

@@ -5,13 +5,14 @@ server:
 spring:
   application:
     name: l2q
-  # --- DataSource Settings ---
-  # These values will be sourced from environment variables.
-  # For local dev, create a .env file. For prod, use Railway's env vars.
+  # Default profile will be 'dev' for local development
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    # For production (Railway), these will be overridden by environment variables
+    url: ${DATABASE_URL:#{null}}
+    username: ${DB_USERNAME:#{null}}
+    password: ${DB_PASSWORD:#{null}}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -30,7 +31,7 @@ management:
       show-details: always
 
 ---
-# Settings for the 'dev' profile (default)
+# Settings for the 'dev' profile (local development)
 spring:
   config:
     activate:
@@ -53,18 +54,17 @@ logging:
               BasicBinder: TRACE
 
 ---
-# Settings for the 'prod' profile
+# Settings for the 'prod' profile (Railway deployment)
 spring:
   config:
     activate:
       on-profile: prod
-  # In production, we just want to override logging and sql formatting
   jpa:
     show-sql: false
-  logging:
-    level:
-      org:
-        springframework:
-          web: INFO
-        hibernate:
-          SQL: WARN
+logging:
+  level:
+    org:
+      springframework:
+        web: INFO
+      hibernate:
+        SQL: WARN
