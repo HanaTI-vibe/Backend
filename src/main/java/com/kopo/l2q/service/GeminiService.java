@@ -249,23 +249,37 @@ public class GeminiService {
     
     private List<String> parseOptions(String optionsText) {
         List<String> options = new ArrayList<>();
+        logger.info("선택지 파싱 시작: '{}'", optionsText);
+        
         try {
             // "A) [선택지1] B) [선택지2] C) [선택지3] D) [선택지4]" 형식 파싱
             String[] parts = optionsText.split("(?=[A-D]\\s*\\))");
+            logger.info("분할된 부분들: {}", Arrays.toString(parts));
+            
             for (String part : parts) {
-                if (part.trim().isEmpty()) continue;
+                if (part.trim().isEmpty()) {
+                    logger.debug("빈 부분 건너뜀");
+                    continue;
+                }
                 // "A) " 부분 제거
                 String option = part.replaceAll("^[A-D]\\s*\\)\\s*", "").trim();
                 if (!option.isEmpty()) {
                     options.add(option);
+                    logger.info("추출된 선택지: '{}'", option);
+                } else {
+                    logger.warn("빈 선택지 발견: '{}'", part);
                 }
             }
+            
+            logger.info("최종 선택지 개수: {}", options.size());
+            
         } catch (Exception e) {
-            logger.warn("선택지 파싱 실패, 기본값 사용: {}", e.getMessage());
+            logger.error("선택지 파싱 실패: {}", e.getMessage(), e);
         }
         
         // 파싱 실패 시 기본 선택지 사용
         if (options.isEmpty()) {
+            logger.warn("선택지 파싱 실패, 기본값 사용");
             options = Arrays.asList("첫 번째 선택지", "두 번째 선택지", "세 번째 선택지", "네 번째 선택지");
         }
         
