@@ -1,5 +1,6 @@
 package com.kopo.l2q.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.util.List;
@@ -21,6 +22,7 @@ public class Question {
     private int points;
     @ManyToOne
     @JoinColumn(name = "room_id")
+    @JsonIgnore
     private Room room;
 
     public enum QuestionType {

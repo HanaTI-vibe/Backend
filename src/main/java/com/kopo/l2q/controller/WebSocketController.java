@@ -4,9 +4,14 @@ import com.kopo.l2q.entity.Participant;
 import com.kopo.l2q.entity.Question;
 import com.kopo.l2q.entity.Room;
 import com.kopo.l2q.service.RoomService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import java.util.List;
@@ -14,19 +19,111 @@ import java.util.Map;
 
 @Controller
 public class WebSocketController {
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketController.class);
+
     @Autowired
     private RoomService roomService;
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
-    @MessageMapping("/join-room")
-    public void joinRoom(@Payload Map<String, String> payload) {
-        String roomId = payload.get("roomId");
-        String userId = payload.get("userId");
-        String userName = payload.get("userName");
-        roomService.addParticipant(roomId, userId, userName, "ws-" + userId);
+    @MessageMapping("/room/{roomId}/join")
+    @SendTo("/topic/room/{roomId}")
+    public Map<String, Object> joinRoom(@DestinationVariable String roomId, 
+                                       @Payload Map<String, String> joinRequest,
+                                       SimpMessageHeaderAccessor headerAccessor) {
+        logger.info("=== WebSocket 방 입장 ===");
+        logger.info("룸 ID: {}, 사용자: {}", roomId, joinRequest.get("userName"));
+        
+        String userId = joinRequest.get("userId");
+        String userName = joinRequest.get("userName");
+        
+        // 참가자 추가
+        roomService.addParticipant(roomId, userId, userName, headerAccessor.getSessionId());
+        
+        // 참가자 목록 업데이트
         List<Participant> participants = roomService.getRoomParticipants(roomId);
-        messagingTemplate.convertAndSend("/topic/room/" + roomId + "/participants", participants);
+        
+        // 시스템 메시지 생성
+        Map<String, Object> systemMessage = Map.of(
+            "type", "system",
+            "message", userName + "님이 입장했습니다.",
+            "timestamp", System.currentTimeMillis()
+        );
+        
+        // 참가자 목록 업데이트 메시지
+        Map<String, Object> participantsUpdate = Map.of(
+            "type", "participants-update",
+            "participants", participants
+        );
+        
+        // 두 메시지를 순차적으로 전송
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, systemMessage);
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, participantsUpdate);
+        
+        return Map.of(
+            "type", "join-success",
+            "userId", userId,
+            "userName", userName,
+            "participants", participants
+        );
+    }
+
+    @MessageMapping("/room/{roomId}/chat")
+    @SendTo("/topic/room/{roomId}")
+    public Map<String, Object> sendMessage(@DestinationVariable String roomId, 
+                                          @Payload Map<String, Object> chatMessage) {
+        logger.info("=== WebSocket 채팅 메시지 ===");
+        logger.info("룸 ID: {}, 사용자: {}, 메시지: {}", 
+            roomId, chatMessage.get("userName"), chatMessage.get("message"));
+        
+        return Map.of(
+            "type", "chat",
+            "userId", chatMessage.get("userId"),
+            "userName", chatMessage.get("userName"),
+            "message", chatMessage.get("message"),
+            "timestamp", System.currentTimeMillis()
+        );
+    }
+
+    @MessageMapping("/room/{roomId}/leave")
+    @SendTo("/topic/room/{roomId}")
+    public Map<String, Object> leaveRoom(@DestinationVariable String roomId, 
+                                        @Payload Map<String, String> leaveRequest) {
+        logger.info("=== WebSocket 방 퇴장 ===");
+        logger.info("룸 ID: {}, 사용자: {}", roomId, leaveRequest.get("userName"));
+        
+        String userId = leaveRequest.get("userId");
+        String userName = leaveRequest.get("userName");
+        
+        // 참가자 제거
+        roomService.removeParticipant(roomId, userId);
+        
+        // 참가자 목록 업데이트
+        List<Participant> participants = roomService.getRoomParticipants(roomId);
+        
+        // 시스템 메시지 생성
+        Map<String, Object> systemMessage = Map.of(
+            "type", "system",
+            "message", userName + "님이 퇴장했습니다.",
+            "timestamp", System.currentTimeMillis()
+        );
+        
+        // 참가자 목록 업데이트 메시지
+        Map<String, Object> participantsUpdate = Map.of(
+            "type", "participants-update",
+            "participants", participants
+        );
+        
+        // 두 메시지를 순차적으로 전송
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, systemMessage);
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, participantsUpdate);
+        
+        return Map.of(
+            "type", "leave-success",
+            "userId", userId,
+            "userName", userName,
+            "participants", participants
+        );
     }
 
     @MessageMapping("/submit-answer")
