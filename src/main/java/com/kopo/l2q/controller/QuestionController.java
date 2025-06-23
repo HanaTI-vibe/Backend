@@ -1,5 +1,7 @@
 package com.kopo.l2q.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kopo.l2q.dto.GenerateQuestionsResponse;
 import com.kopo.l2q.dto.RoomResponse;
 import com.kopo.l2q.entity.Question;
@@ -26,6 +28,8 @@ public class QuestionController {
     
     @Autowired
     private RoomService roomService;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping
     public ResponseEntity<GenerateQuestionsResponse> generateQuestions(
@@ -38,13 +42,31 @@ public class QuestionController {
         logger.info("=== 문제 생성 API 호출 ===");
         logger.info("PDF 파일명: {}", pdf.getOriginalFilename());
         logger.info("PDF 파일 크기: {} bytes", pdf.getSize());
-        logger.info("문제 유형: {}", questionTypesJson);
+        logger.info("문제 유형 JSON: {}", questionTypesJson);
         logger.info("문제 개수: {}", questionCount);
         logger.info("난이도: {}", difficulty);
         logger.info("제한시간: {}초", timeLimit);
         
         try {
-            List<String> questionTypes = List.of("multiple-choice", "short-answer");
+            // 프론트엔드에서 전송한 문제 타입 JSON을 파싱
+            List<String> questionTypes;
+            try {
+                questionTypes = objectMapper.readValue(questionTypesJson, new TypeReference<List<String>>() {});
+                logger.info("파싱된 문제 유형: {}", questionTypes);
+            } catch (Exception e) {
+                logger.error("문제 유형 JSON 파싱 실패: {}", e.getMessage());
+                // 파싱 실패 시 기본값으로 객관식 사용
+                questionTypes = List.of("multiple-choice");
+                logger.info("기본 문제 유형으로 설정: {}", questionTypes);
+            }
+            
+            // 문제 유형 검증
+            if (questionTypes.isEmpty()) {
+                logger.warn("문제 유형이 비어있음. 기본값으로 객관식 설정");
+                questionTypes = List.of("multiple-choice");
+            }
+            
+            logger.info("최종 사용할 문제 유형: {}", questionTypes);
             logger.info("문제 생성 시작...");
             
             List<Question> questions = questionGenerationService.generateQuestions(
