@@ -203,4 +203,14 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
             "isLastQuestion", currentQuestion >= totalQuestions - 1
         ));
     }
+    
+    public void broadcastAnswerSubmitted(String roomId, String userId, String userName) {
+        logger.info("답안 제출 브로드캐스트: roomId={}, userId={}, userName={}", roomId, userId, userName);
+        broadcastToRoom(roomId, Map.of(
+            "type", "answer-submitted",
+            "userId", userId,
+            "userName", userName,
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
 } 
