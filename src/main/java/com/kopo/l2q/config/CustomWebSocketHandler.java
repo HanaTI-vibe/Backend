@@ -191,4 +191,16 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
             "type", "quiz-finished"
         ));
     }
+    
+    public void broadcastGameStarted(String roomId, int currentQuestion, int totalQuestions, int timeLimit) {
+        logger.info("게임 시작 브로드캐스트: roomId={}, currentQuestion={}, totalQuestions={}, timeLimit={}", 
+                   roomId, currentQuestion, totalQuestions, timeLimit);
+        broadcastToRoom(roomId, Map.of(
+            "type", "game-started",
+            "currentQuestion", currentQuestion,
+            "totalQuestions", totalQuestions,
+            "timeLimit", timeLimit,
+            "isLastQuestion", currentQuestion >= totalQuestions - 1
+        ));
+    }
 } 

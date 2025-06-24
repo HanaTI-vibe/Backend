@@ -95,6 +95,9 @@ public class GameController {
             response.timeLimit = room.getTimeLimit();
             response.participants = roomService.getRoomParticipants(request.roomId);
             
+            // WebSocket으로 모든 클라이언트에게 게임 시작 알림
+            webSocketHandler.broadcastGameStarted(request.roomId, 0, questions.size(), room.getTimeLimit());
+            
             logger.info("게임 시작 성공: 룸 {}", request.roomId);
             return ResponseEntity.ok(response);
         } else {
