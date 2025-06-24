@@ -64,16 +64,20 @@ public class RoomService {
         room.setStatus(Room.RoomStatus.WAITING);
         room.setCurrentQuestion(0);
         
-        // DB에 저장
-        roomRepository.save(room);
-        logger.info("DB에 룸 저장됨: {}", roomId);
-        
-        // 문제들을 DB에 저장
-        for (Question question : questions) {
-            question.setRoom(room);
-            questionRepository.save(question);
+        // DB에 저장 시도
+        try {
+            roomRepository.save(room);
+            logger.info("DB에 룸 저장됨: {}", roomId);
+            
+            // 문제들을 DB에 저장
+            for (Question question : questions) {
+                question.setRoom(room);
+                questionRepository.save(question);
+            }
+            logger.info("DB에 문제 {}개 저장됨", questions.size());
+        } catch (Exception e) {
+            logger.warn("룸 DB 저장 실패, 메모리에만 저장: {}", e.getMessage());
         }
-        logger.info("DB에 문제 {}개 저장됨", questions.size());
         
         // 캐시에 저장
         roomCache.put(roomId, room);
@@ -115,37 +119,54 @@ public class RoomService {
         logger.info("사용자명: {}", userName);
         logger.info("소켓 ID: {}", socketId);
         
+        Room room = roomCache.get(roomId);
+        if (room == null) {
+            logger.warn("룸을 찾을 수 없어 참가자 추가 실패: {}", roomId);
+            return;
+        }
+        
         Map<String, Participant> roomParticipants = participantCache.get(roomId);
-        if (roomParticipants != null) {
-            Participant participant = new Participant();
-            participant.setId(userId);
-            participant.setName(userName);
-            participant.setSocketId(socketId);
-            participant.setScore(0);
-            participant.setReady(false);
-            
-            // Room 객체 설정
-            Room room = roomCache.get(roomId);
-            if (room != null) {
-                participant.setRoom(room);
-                
-                // 첫 번째 참가자를 방장으로 설정
-                if (room.getHostUserId() == null || room.getHostUserId().isEmpty()) {
-                    room.setHostUserId(userId);
-                    roomRepository.save(room); // DB에 방장 정보 저장
-                    logger.info("방장 설정: {} (룸: {})", userName, roomId);
-                }
+        if (roomParticipants == null) {
+            roomParticipants = new ConcurrentHashMap<>();
+            participantCache.put(roomId, roomParticipants);
+        }
+        
+        // 이미 참가한 사용자인지 확인
+        if (roomParticipants.containsKey(userId)) {
+            logger.info("이미 참가한 사용자: {} (룸: {})", userName, roomId);
+            return;
+        }
+        
+        Participant participant = new Participant();
+        participant.setId(userId);
+        participant.setName(userName);
+        participant.setSocketId(socketId);
+        participant.setScore(0);
+        participant.setReady(false);
+        participant.setRoom(room);
+        
+        // 첫 번째 참가자를 방장으로 설정
+        boolean isFirstParticipant = roomParticipants.isEmpty();
+        if (isFirstParticipant || room.getHostUserId() == null || room.getHostUserId().isEmpty()) {
+            room.setHostUserId(userId);
+            try {
+                roomRepository.save(room); // DB에 방장 정보 저장
+                logger.info("방장 설정 및 DB 저장: {} (룸: {})", userName, roomId);
+            } catch (Exception e) {
+                logger.warn("방장 정보 DB 저장 실패, 메모리에만 저장: {}", e.getMessage());
             }
-            
-            // DB에 저장
+        }
+        
+        // DB에 저장 시도
+        try {
             participantRepository.save(participant);
             logger.info("DB에 참가자 저장됨: {}", userId);
-            
-            roomParticipants.put(userId, participant);
-            logger.info("참가자 추가 완료: {} (룸: {})", userName, roomId);
-        } else {
-            logger.warn("룸을 찾을 수 없어 참가자 추가 실패: {}", roomId);
+        } catch (Exception e) {
+            logger.warn("참가자 DB 저장 실패, 메모리에만 저장: {}", e.getMessage());
         }
+        
+        roomParticipants.put(userId, participant);
+        logger.info("참가자 추가 완료: {} (룸: {}, 총 참가자: {}명)", userName, roomId, roomParticipants.size());
     }
 
     public void removeParticipant(String roomId, String userId) {
@@ -154,11 +175,15 @@ public class RoomService {
         if (roomParticipants != null) {
             roomParticipants.remove(userId);
             
-            // DB에서 삭제
-            Room room = roomCache.get(roomId);
-            if (room != null) {
-                participantRepository.deleteByRoomAndId(room, userId);
-                logger.info("DB에서 참가자 삭제됨: {}", userId);
+            // DB에서 삭제 시도
+            try {
+                Room room = roomCache.get(roomId);
+                if (room != null) {
+                    participantRepository.deleteByRoomAndId(room, userId);
+                    logger.info("DB에서 참가자 삭제됨: {}", userId);
+                }
+            } catch (Exception e) {
+                logger.warn("참가자 DB 삭제 실패, 캐시에서만 제거: {}", e.getMessage());
             }
             
             logger.info("참가자 제거 완료: {}", userId);
@@ -169,11 +194,15 @@ public class RoomService {
         Map<String, Participant> roomParticipants = participantCache.get(roomId);
         List<Participant> participantList = roomParticipants != null ? new ArrayList<>(roomParticipants.values()) : new ArrayList<>();
         
-        // DB에서도 조회하여 캐시와 동기화
-        Room room = roomCache.get(roomId);
-        if (room != null) {
-            List<Participant> dbParticipants = participantRepository.findByRoom(room);
-            logger.debug("DB에서 조회된 참가자 수: {}", dbParticipants.size());
+        // DB에서도 조회 시도 (실패하면 캐시만 사용)
+        try {
+            Room room = roomCache.get(roomId);
+            if (room != null) {
+                List<Participant> dbParticipants = participantRepository.findByRoom(room);
+                logger.debug("DB에서 조회된 참가자 수: {}", dbParticipants.size());
+            }
+        } catch (Exception e) {
+            logger.warn("DB에서 참가자 조회 실패, 캐시 데이터 사용: {}", e.getMessage());
         }
         
         logger.debug("룸 {} 참가자 목록 조회: {}명", roomId, participantList.size());
@@ -189,9 +218,13 @@ public class RoomService {
                 int oldScore = participant.getScore();
                 participant.setScore(participant.getScore() + points);
                 
-                // DB에 저장
-                participantRepository.save(participant);
-                logger.info("DB에 점수 업데이트 저장됨: {}", userId);
+                // DB에 저장 시도
+                try {
+                    participantRepository.save(participant);
+                    logger.info("DB에 점수 업데이트 저장됨: {}", userId);
+                } catch (Exception e) {
+                    logger.warn("점수 DB 저장 실패, 메모리에만 저장: {}", e.getMessage());
+                }
                 
                 logger.info("점수 업데이트 완료: {} -> {} (변화: {})", oldScore, participant.getScore(), points);
             } else {

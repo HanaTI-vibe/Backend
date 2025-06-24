@@ -26,7 +26,7 @@ public class GeminiService {
     private String apiKey;
     
     private final RestTemplate restTemplate = new RestTemplate();
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     
     public List<Question> generateQuestionsFromPDF(MultipartFile pdf, List<String> questionTypes, 
                                                    int questionCount, String difficulty, int timeLimit) {
