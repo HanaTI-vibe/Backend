@@ -187,8 +187,13 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
     
     public void broadcastQuizFinished(String roomId) {
         logger.info("퀴즈 종료 브로드캐스트: roomId={}", roomId);
+        
+        // 최종 점수를 포함한 참가자 목록 조회
+        List<Participant> finalScores = roomService.getRoomParticipants(roomId);
+        
         broadcastToRoom(roomId, Map.of(
-            "type", "quiz-finished"
+            "type", "quiz-finished",
+            "finalScores", finalScores
         ));
     }
     
