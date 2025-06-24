@@ -53,6 +53,21 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
                 case "leave":
                     handleLeave(session, data);
                     break;
+                case "webrtc-offer":
+                    handleWebRTCOffer(session, data);
+                    break;
+                case "webrtc-answer":
+                    handleWebRTCAnswer(session, data);
+                    break;
+                case "webrtc-ice-candidate":
+                    handleWebRTCIceCandidate(session, data);
+                    break;
+                case "video-toggle":
+                    handleVideoToggle(session, data);
+                    break;
+                case "audio-toggle":
+                    handleAudioToggle(session, data);
+                    break;
                 default:
                     logger.warn("알 수 없는 메시지 타입: {}", type);
             }
@@ -65,6 +80,9 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         logger.info("WebSocket 연결 해제됨: {}", session.getId());
         sessions.remove(session.getId());
+        
+        // 사용자-세션 매핑에서 해당 세션 제거
+        userToSession.entrySet().removeIf(entry -> entry.getValue().equals(session.getId()));
         
         // 세션에서 방 정보 제거
         String roomId = sessionToRoom.remove(session.getId());
@@ -87,6 +105,9 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
         
         // 세션과 방 연결
         sessionToRoom.put(session.getId(), roomId);
+        
+        // 사용자-세션 매핑 추가
+        userToSession.put(userId, session.getId());
         
         // 참가자 추가
         roomService.addParticipant(roomId, userId, userName, session.getId());
@@ -212,5 +233,115 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
             "userName", userName,
             "timestamp", System.currentTimeMillis()
         ));
+    }
+    
+    // 사용자별 세션 매핑을 위한 추가 맵
+    private final Map<String, String> userToSession = new ConcurrentHashMap<>();
+    
+    // WebRTC signaling 메시지 처리 메서드들
+    private void handleWebRTCOffer(WebSocketSession session, Map<String, Object> data) throws Exception {
+        String roomId = (String) data.get("roomId");
+        String fromUserId = (String) data.get("fromUserId");
+        String toUserId = (String) data.get("toUserId");
+        Object offer = data.get("offer");
+        
+        logger.info("WebRTC Offer 전달: roomId={}, from={}, to={}", roomId, fromUserId, toUserId);
+        
+        // 특정 사용자에게 offer 전달
+        sendToUser(toUserId, Map.of(
+            "type", "webrtc-offer",
+            "fromUserId", fromUserId,
+            "offer", offer
+        ));
+    }
+    
+    private void handleWebRTCAnswer(WebSocketSession session, Map<String, Object> data) throws Exception {
+        String roomId = (String) data.get("roomId");
+        String fromUserId = (String) data.get("fromUserId");
+        String toUserId = (String) data.get("toUserId");
+        Object answer = data.get("answer");
+        
+        logger.info("WebRTC Answer 전달: roomId={}, from={}, to={}", roomId, fromUserId, toUserId);
+        
+        // 특정 사용자에게 answer 전달
+        sendToUser(toUserId, Map.of(
+            "type", "webrtc-answer",
+            "fromUserId", fromUserId,
+            "answer", answer
+        ));
+    }
+    
+    private void handleWebRTCIceCandidate(WebSocketSession session, Map<String, Object> data) throws Exception {
+        String roomId = (String) data.get("roomId");
+        String fromUserId = (String) data.get("fromUserId");
+        String toUserId = (String) data.get("toUserId");
+        Object candidate = data.get("candidate");
+        
+        logger.info("WebRTC ICE Candidate 전달: roomId={}, from={}, to={}", roomId, fromUserId, toUserId);
+        
+        // 특정 사용자에게 ice candidate 전달
+        sendToUser(toUserId, Map.of(
+            "type", "webrtc-ice-candidate",
+            "fromUserId", fromUserId,
+            "candidate", candidate
+        ));
+    }
+    
+    private void handleVideoToggle(WebSocketSession session, Map<String, Object> data) throws Exception {
+        String roomId = (String) data.get("roomId");
+        String userId = (String) data.get("userId");
+        Boolean videoEnabled = (Boolean) data.get("videoEnabled");
+        
+        logger.info("비디오 토글: roomId={}, userId={}, enabled={}", roomId, userId, videoEnabled);
+        
+        // 방의 모든 사용자에게 비디오 상태 변경 알림
+        broadcastToRoom(roomId, Map.of(
+            "type", "video-toggle",
+            "userId", userId,
+            "videoEnabled", videoEnabled
+        ));
+    }
+    
+    private void handleAudioToggle(WebSocketSession session, Map<String, Object> data) throws Exception {
+        String roomId = (String) data.get("roomId");
+        String userId = (String) data.get("userId");
+        Boolean audioEnabled = (Boolean) data.get("audioEnabled");
+        
+        logger.info("오디오 토글: roomId={}, userId={}, enabled={}", roomId, userId, audioEnabled);
+        
+        // 방의 모든 사용자에게 오디오 상태 변경 알림
+        broadcastToRoom(roomId, Map.of(
+            "type", "audio-toggle",
+            "userId", userId,
+            "audioEnabled", audioEnabled
+        ));
+    }
+    
+    // 특정 사용자에게 메시지 전송하는 메서드
+    private void sendToUser(String userId, Map<String, Object> message) {
+        try {
+            String messageJson = objectMapper.writeValueAsString(message);
+            TextMessage textMessage = new TextMessage(messageJson);
+            
+            String sessionId = userToSession.get(userId);
+            if (sessionId != null) {
+                WebSocketSession session = sessions.get(sessionId);
+                if (session != null && session.isOpen()) {
+                    session.sendMessage(textMessage);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("사용자별 메시지 전송 실패: {}", e.getMessage());
+        }
+    }
+    
+    // Join 시 사용자-세션 매핑 추가 (기존 handleJoin 메서드 수정 필요)
+    public void addUserSessionMapping(String userId, String sessionId) {
+        userToSession.put(userId, sessionId);
+    }
+    
+    // 연결 해제 시 매핑 제거
+    public void removeUserSessionMapping(String userId) {
+        userToSession.remove(userId);
     }
 } 
