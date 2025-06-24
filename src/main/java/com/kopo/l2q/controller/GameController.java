@@ -166,6 +166,17 @@ public class GameController {
         
         roomService.updateParticipantScore(request.roomId, request.userId, points);
         
+        // WebSocket으로 모든 클라이언트에게 답안 제출 알림
+        // 사용자 이름을 가져오기 위해 참가자 목록에서 찾기
+        List<Participant> participants = roomService.getRoomParticipants(request.roomId);
+        String userName = participants.stream()
+            .filter(p -> p.getId().equals(request.userId))
+            .findFirst()
+            .map(Participant::getName)
+            .orElse("Unknown");
+        
+        webSocketHandler.broadcastAnswerSubmitted(request.roomId, request.userId, userName);
+        
         SubmitAnswerResponse result = new SubmitAnswerResponse();
         result.isCorrect = isCorrect;
         result.points = points;
