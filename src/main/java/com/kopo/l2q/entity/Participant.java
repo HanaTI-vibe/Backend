@@ -11,8 +11,13 @@ public class Participant {
     private String id;
     private String name;
     private int score = 0;
+    
+    @Column(columnDefinition = "BOOLEAN DEFAULT false")
     private boolean isReady = false;
+    
+    @Column(columnDefinition = "BOOLEAN DEFAULT false")
     private boolean submitted = false;
+    
     private String socketId;
     @ManyToOne
     @JoinColumn(name = "room_id")
