@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
+import java.util.Random;
 
 @Service
 @Transactional
@@ -284,5 +286,10 @@ public class RoomService {
         
         logger.info("게임 시작됨: 룸 {}", roomId);
         return true;
+    }
+
+    public String findRoomByInviteCode(String inviteCode) {
+        Optional<Room> room = roomRepository.findByInviteCode(inviteCode);
+        return room.map(Room::getId).orElse(null);
     }
 } 

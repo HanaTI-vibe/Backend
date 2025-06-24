@@ -11,13 +11,24 @@ import com.kopo.l2q.service.RoomService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.Parameters;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 @RestController
-@RequestMapping("/api/generate-questions")
+@RequestMapping("/api")
+@Tag(name = "Question", description = "문제 생성 및 관리 API")
 @CrossOrigin(origins = "*")
 public class QuestionController {
     
@@ -31,13 +42,28 @@ public class QuestionController {
     
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @PostMapping
+    @PostMapping(value = "/generate-questions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "PDF 기반 문제 생성", description = "PDF 파일을 업로드하여 AI 기반으로 학습 문제를 생성하고 학습방을 만듭니다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "문제 생성 및 방 생성 성공", content = @Content(schema = @Schema(implementation = GenerateQuestionsResponse.class))),
+        @ApiResponse(responseCode = "400", description = "잘못된 요청"),
+        @ApiResponse(responseCode = "500", description = "서버 오류")
+    })
+    @Parameters({
+        @Parameter(name = "pdf", description = "문제 생성을 위한 PDF 파일", required = true),
+        @Parameter(name = "questionTypes", description = "문제 유형 배열(JSON 문자열)", example = "[\"multiple-choice\", \"short-answer\"]", required = true),
+        @Parameter(name = "questionCount", description = "생성할 문제 개수", example = "10", required = true),
+        @Parameter(name = "difficulty", description = "문제 난이도", example = "medium", required = true),
+        @Parameter(name = "timeLimit", description = "문제당 제한 시간(초)", example = "30", required = true),
+        @Parameter(name = "isMock", description = "Mock 문제 생성 여부", example = "false")
+    })
     public ResponseEntity<GenerateQuestionsResponse> generateQuestions(
             @RequestParam("pdf") MultipartFile pdf,
             @RequestParam("questionTypes") String questionTypesJson,
             @RequestParam("questionCount") int questionCount,
             @RequestParam("difficulty") String difficulty,
-            @RequestParam("timeLimit") int timeLimit) {
+            @RequestParam("timeLimit") int timeLimit,
+            @RequestParam(value = "isMock", required = false, defaultValue = "false") boolean isMock) {
         
         logger.info("=== 문제 생성 API 호출 ===");
         logger.info("PDF 파일명: {}", pdf.getOriginalFilename());
@@ -75,11 +101,9 @@ public class QuestionController {
             
             String roomId = questionGenerationService.generateRoomId();
             String inviteCode = roomService.generateInviteCode();
-            boolean isMock = questions.get(0).getId().startsWith("mock-");
             
             logger.info("룸 ID 생성: {}", roomId);
             logger.info("초대코드 생성: {}", inviteCode);
-            logger.info("Mock 모드: {}", isMock);
             
             for (Question question : questions) {
                 question.setRoom(new Room());
@@ -88,6 +112,9 @@ public class QuestionController {
             
             Room room = roomService.createRoom(roomId, inviteCode, questions, timeLimit, isMock);
             logger.info("룸 생성 완료: {}", room.getId());
+            
+            boolean isMockResponse = questions.get(0).getId().startsWith("mock-");
+            logger.info("Mock 모드: {}", isMockResponse);
             
             GenerateQuestionsResponse response = new GenerateQuestionsResponse();
             response.setRoomId(roomId);
@@ -108,6 +135,7 @@ public class QuestionController {
     }
 
     @GetMapping
+    @Operation(summary = "방 정보 조회", description = "roomId를 사용하여 특정 방의 상세 정보를 조회합니다.")
     public ResponseEntity<RoomResponse> getRoom(@RequestParam("roomId") String roomId) {
         logger.info("=== 룸 정보 조회 API 호출 ===");
         logger.info("요청된 룸 ID: {}", roomId);
