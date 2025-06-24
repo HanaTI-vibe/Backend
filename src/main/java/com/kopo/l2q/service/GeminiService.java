@@ -17,6 +17,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+
 @Service
 public class GeminiService {
     
@@ -126,6 +129,11 @@ public class GeminiService {
         try (PDDocument document = PDDocument.load(pdf.getInputStream())) {
             PDFTextStripper pdfStripper = new PDFTextStripper();
             String text = pdfStripper.getText(document);
+            // API 요청을 위해 텍스트 길이 제한
+            if (text.length() > 30000) {
+                text = text.substring(0, 30000);
+                logger.warn("PDF 내용이 너무 길어 30000자로 제한되었습니다.");
+            }
             logger.info("PDF 텍스트 추출 완료. 추출 길이: {}자", text.length());
             return text;
         } catch (IOException e) {
@@ -135,155 +143,144 @@ public class GeminiService {
     }
     
     private String createPrompt(List<String> questionTypes, int questionCount, String difficulty, String pdfContent) {
-        StringBuilder prompt = new StringBuilder();
-        prompt.append("다음 PDF 내용을 바탕으로 ").append(questionCount).append("개의 문제를 생성해주세요.\n\n");
-        prompt.append("PDF 내용:\n").append(pdfContent).append("\n\n");
-        
-        prompt.append("요구사항:\n");
-        prompt.append("- 문제 유형: ");
-        if (questionTypes.contains("multiple-choice")) {
-            prompt.append("객관식 (4개 선택지)");
-        }
-        if (questionTypes.contains("short-answer")) {
-            prompt.append(", 단답식");
-        }
-        prompt.append("\n");
-        
-        prompt.append("- 난이도: ");
+        String questionTypeString = String.join(", ", questionTypes).replace("multiple-choice", "객관식").replace("short-answer", "단답식");
+        String difficultyString = "";
         switch (difficulty) {
             case "easy":
-                prompt.append("기본적인 개념과 용어를 묻는 쉬운 문제");
+                difficultyString = "쉬움";
                 break;
             case "medium":
-                prompt.append("개념을 이해하고 적용할 수 있는 중간 난이도 문제");
+                difficultyString = "중간";
                 break;
             case "hard":
-                prompt.append("심화 사고와 분석이 필요한 어려운 문제");
+                difficultyString = "어려움";
                 break;
         }
-        prompt.append("\n");
-        
-        prompt.append("- 각 문제는 다음 형식으로 작성해주세요:\n");
-        prompt.append("문제1: [문제 내용]\n");
-        prompt.append("유형: [객관식/단답식]\n");
-        if (questionTypes.contains("multiple-choice")) {
-            prompt.append("선택지: A) [선택지1] B) [선택지2] C) [선택지3] D) [선택지4]\n");
-        }
-        prompt.append("정답: [정답]\n");
-        prompt.append("설명: [정답 설명]\n");
-        prompt.append("점수: [점수]\n\n");
-        
-        prompt.append("PDF 내용을 바탕으로 학습자가 핵심 개념을 이해했는지 확인할 수 있는 문제를 만들어주세요.");
-        
-        return prompt.toString();
+
+        return String.format(
+            "너는 이제부터 문제 출제 전문가야. 다음 PDF 내용을 기반으로, 아래 요구사항에 맞춰 학습 퀴즈를 생성해줘." +
+            "반드시 JSON 형식으로 응답해야 하며, 다른 설명은 포함하지 마." +
+            "PDF 내용: \"%s\"\n\n" +
+            "요구사항:\n" +
+            "- 문제 수: %d개\n" +
+            "- 문제 유형: %s\n" +
+            "- 난이도: %s\n" +
+            "- 응답 형식: 반드시 다음 JSON 구조를 따라야 하며, 객관식 문제는 반드시 4개의 선택지를 생성해야 함.\n" +
+            "{\n" +
+            "  \"questions\": [\n" +
+            "    {\n" +
+            "      \"type\": \"객관식 또는 단답식\",\n" +
+            "      \"question\": \"문제 내용\",\n" +
+            "      \"options\": [\"선택지 A\", \"선택지 B\", \"선택지 C\", \"선택지 D\"],\n" +
+            "      \"correctAnswer\": \"정답 내용\",\n" +
+            "      \"explanation\": \"정답에 대한 상세 설명\",\n" +
+            "      \"points\": 1\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}",
+            pdfContent.substring(0, Math.min(pdfContent.length(), 30000)), // PDF 내용 길이 제한
+            questionCount,
+            questionTypeString,
+            difficultyString
+        );
     }
     
     private List<Question> parseQuestionsFromResponse(String response, int expectedCount) {
         logger.info("Gemini 응답 파싱 시작");
-        logger.debug("응답 내용: {}", response);
         List<Question> questions = new ArrayList<>();
-        
+
         try {
-            // 간단한 파싱 로직 (실제로는 더 정교한 파싱 필요)
-            String[] lines = response.split("\n");
-            Question currentQuestion = null;
+            // 응답에서 JSON 부분만 추출 (마크다운 코드 블록 제거)
+            String jsonResponse = response.replaceAll("```json", "").replaceAll("```", "").trim();
             
-            for (String line : lines) {
-                line = line.trim();
-                
-                if (line.startsWith("문제") || line.startsWith("Q")) {
-                    if (currentQuestion != null) {
-                        questions.add(currentQuestion);
-                    }
-                    currentQuestion = new Question();
-                    currentQuestion.setId("gemini-" + UUID.randomUUID().toString().substring(0, 8));
-                    // 기본값은 객관식으로 설정
-                    currentQuestion.setType(Question.QuestionType.MULTIPLE_CHOICE);
-                    currentQuestion.setQuestion(line.substring(line.indexOf(":") + 1).trim());
-                    currentQuestion.setPoints(1);
-                } else if (line.startsWith("유형:") && currentQuestion != null) {
-                    // 문제 유형 파싱
-                    String typeText = line.substring(line.indexOf(":") + 1).trim().toLowerCase();
-                    if (typeText.contains("단답") || typeText.contains("short")) {
-                        currentQuestion.setType(Question.QuestionType.SHORT_ANSWER);
+            // ObjectMapper를 사용하여 JSON 파싱
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode rootNode = mapper.readTree(jsonResponse);
+            JsonNode questionsNode = rootNode.path("questions");
+
+            if (questionsNode.isArray()) {
+                for (JsonNode questionNode : questionsNode) {
+                    Question question = new Question();
+                    question.setId("gemini-" + UUID.randomUUID().toString().substring(0, 8));
+
+                    String typeStr = questionNode.path("type").asText("").toLowerCase();
+                    if (typeStr.contains("객관식") || typeStr.contains("multiple")) {
+                        question.setType(Question.QuestionType.MULTIPLE_CHOICE);
                     } else {
-                        currentQuestion.setType(Question.QuestionType.MULTIPLE_CHOICE);
+                        question.setType(Question.QuestionType.SHORT_ANSWER);
                     }
-                } else if (line.startsWith("선택지:") && currentQuestion != null) {
-                    // 객관식일 때만 선택지 파싱
-                    if (currentQuestion.getType() == Question.QuestionType.MULTIPLE_CHOICE) {
-                        String optionsText = line.substring(line.indexOf(":") + 1).trim();
-                        List<String> options = parseOptions(optionsText);
-                        currentQuestion.setOptions(options);
+
+                    question.setQuestion(questionNode.path("question").asText());
+                    String correctAnswer = questionNode.path("correctAnswer").asText();
+                    question.setExplanation(questionNode.path("explanation").asText());
+                    question.setPoints(questionNode.path("points").asInt(1));
+
+                    if (question.getType() == Question.QuestionType.MULTIPLE_CHOICE) {
+                        // 옵션 텍스트에서 "A.", "B)" 같은 마커 제거
+                        List<String> options = new ArrayList<>();
+                        JsonNode optionsNode = questionNode.path("options");
+                        if (optionsNode.isArray()) {
+                            for (JsonNode optionNode : optionsNode) {
+                                String optionText = optionNode.asText();
+                                String cleanedOption = optionText.replaceAll("^[A-Da-d][.)]\\s*", "").trim();
+                                options.add(cleanedOption);
+                            }
+                        }
+                        question.setOptions(options);
+
+                        // 정답 텍스트가 어떤 옵션과 일치하는지 찾아 인덱스를 저장
+                        String cleanedCorrectAnswer = correctAnswer.replaceAll("^[A-Da-d][.)]\\s*", "").trim();
+                        int correctIndex = -1;
+                        for (int i = 0; i < options.size(); i++) {
+                            // 1. 완전 일치 (대소문자 무시)
+                            if (options.get(i).equalsIgnoreCase(cleanedCorrectAnswer)) {
+                                correctIndex = i;
+                                break;
+                            }
+                            // 2. 정답이 보기에 포함되는 경우
+                            if (cleanedCorrectAnswer.contains(options.get(i))) {
+                                correctIndex = i;
+                                break;
+                            }
+                            // 3. 보기가 정답에 포함되는 경우
+                            if (options.get(i).contains(cleanedCorrectAnswer)) {
+                                correctIndex = i;
+                            }
+                        }
+                        
+                        // 정답을 인덱스(문자열)로 저장
+                        question.setCorrectAnswer(String.valueOf(correctIndex));
+                    } else {
+                        question.setCorrectAnswer(correctAnswer);
                     }
-                } else if (line.startsWith("정답:") && currentQuestion != null) {
-                    currentQuestion.setCorrectAnswer(line.substring(line.indexOf(":") + 1).trim());
-                } else if (line.startsWith("설명:") && currentQuestion != null) {
-                    currentQuestion.setExplanation(line.substring(line.indexOf(":") + 1).trim());
+                    questions.add(question);
                 }
             }
-            
-            if (currentQuestion != null) {
-                questions.add(currentQuestion);
-            }
-            
+
             // 생성된 문제가 부족하면 Mock 문제로 보충
             while (questions.size() < expectedCount) {
+                logger.warn("생성된 문제가 요청된 수({})보다 적어 Mock 문제로 보충합니다. (현재: {})", expectedCount, questions.size());
                 questions.add(generateMockQuestion(questions.size() + 1));
             }
-            
+
             // 문제 수를 요청된 개수로 제한
             if (questions.size() > expectedCount) {
                 questions = questions.subList(0, expectedCount);
             }
-            
+
         } catch (Exception e) {
-            logger.error("응답 파싱 중 오류: {}", e.getMessage());
-            // 파싱 실패 시 Mock 데이터 반환
+            logger.error("응답 파싱 중 심각한 오류 발생: {}. Mock 데이터로 대체합니다.", e.getMessage());
             return generateMockQuestions(expectedCount);
         }
         
+        // 파싱 결과가 비어있으면 Mock 데이터 반환
+        if (questions.isEmpty()) {
+            logger.warn("파싱 후 생성된 문제가 없습니다. Mock 데이터로 대체합니다.");
+            return generateMockQuestions(expectedCount);
+        }
+
         logger.info("파싱 완료: {}개 문제 생성", questions.size());
         return questions;
-    }
-    
-    private List<String> parseOptions(String optionsText) {
-        List<String> options = new ArrayList<>();
-        logger.info("선택지 파싱 시작: '{}'", optionsText);
-        
-        try {
-            // "A) [선택지1] B) [선택지2] C) [선택지3] D) [선택지4]" 형식 파싱
-            String[] parts = optionsText.split("(?=[A-D]\\s*\\))");
-            logger.info("분할된 부분들: {}", Arrays.toString(parts));
-            
-            for (String part : parts) {
-                if (part.trim().isEmpty()) {
-                    logger.debug("빈 부분 건너뜀");
-                    continue;
-                }
-                // "A) " 부분 제거
-                String option = part.replaceAll("^[A-D]\\s*\\)\\s*", "").trim();
-                if (!option.isEmpty()) {
-                    options.add(option);
-                    logger.info("추출된 선택지: '{}'", option);
-                } else {
-                    logger.warn("빈 선택지 발견: '{}'", part);
-                }
-            }
-            
-            logger.info("최종 선택지 개수: {}", options.size());
-            
-        } catch (Exception e) {
-            logger.error("선택지 파싱 실패: {}", e.getMessage(), e);
-        }
-        
-        // 파싱 실패 시 기본 선택지 사용
-        if (options.isEmpty()) {
-            logger.warn("선택지 파싱 실패, 기본값 사용");
-            options = Arrays.asList("첫 번째 선택지", "두 번째 선택지", "세 번째 선택지", "네 번째 선택지");
-        }
-        
-        return options;
     }
     
     private List<Question> generateMockQuestions(int count) {

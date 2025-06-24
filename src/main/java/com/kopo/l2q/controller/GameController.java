@@ -136,6 +136,7 @@ public class GameController {
         int points = 0;
         
         if (currentQuestion.getType() == Question.QuestionType.MULTIPLE_CHOICE) {
+            // 인덱스 기반 정답 비교
             isCorrect = answer.equals(currentQuestion.getCorrectAnswer());
             points = isCorrect ? currentQuestion.getPoints() : 0;
         } else if (currentQuestion.getType() == Question.QuestionType.SHORT_ANSWER) {
