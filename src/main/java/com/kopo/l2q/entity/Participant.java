@@ -12,6 +12,7 @@ public class Participant {
     private String name;
     private int score = 0;
     private boolean isReady = false;
+    private boolean submitted = false;
     private String socketId;
     @ManyToOne
     @JoinColumn(name = "room_id")
