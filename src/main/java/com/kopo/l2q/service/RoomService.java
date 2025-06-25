@@ -101,6 +101,17 @@ public class RoomService {
 
     public Room getRoomByInviteCode(String inviteCode) {
         logger.debug("초대코드로 룸 검색: {}", inviteCode);
+        
+        // 디버깅: 현재 캐시에 있는 모든 방들 출력
+        logger.info("=== 현재 캐시에 있는 방들 ===");
+        logger.info("총 방 개수: {}", roomCache.size());
+        for (Map.Entry<String, Room> entry : roomCache.entrySet()) {
+            Room room = entry.getValue();
+            logger.info("룸 ID: {}, 초대코드: {}, 상태: {}", 
+                room.getId(), room.getInviteCode(), room.getStatus());
+        }
+        logger.info("=== 캐시 확인 완료 ===");
+        
         Room room = roomCache.values().stream()
                 .filter(r -> r.getInviteCode().equals(inviteCode.toUpperCase()))
                 .findFirst()

@@ -37,16 +37,25 @@ public class RoomController {
             return ResponseEntity.badRequest().build();
         }
         
-        Room room = roomService.getRoomByInviteCode(code);
+        // 대소문자 변환 확인
+        String upperCode = code.toUpperCase();
+        logger.info("대문자로 변환된 초대코드: {}", upperCode);
+        
+        Room room = roomService.getRoomByInviteCode(upperCode);
         if (room == null) {
-            logger.warn("초대코드에 해당하는 룸을 찾을 수 없음: {}", code);
+            logger.warn("초대코드에 해당하는 룸을 찾을 수 없음: {}", upperCode);
+            
+            // 현재 캐시에 있는 모든 방의 초대코드를 출력 (디버깅용)
+            logger.info("=== 현재 캐시에 있는 모든 방들 ===");
+            // TODO: 이 부분은 roomService에 디버깅 메서드가 필요할 수 있음
+            
             return ResponseEntity.notFound().build();
         }
         
         Map<String, String> response = new HashMap<>();
         response.put("roomId", room.getId());
         
-        logger.info("룸 조회 성공: 초대코드 {} -> 룸 ID {}", code, room.getId());
+        logger.info("룸 조회 성공: 초대코드 {} -> 룸 ID {}", upperCode, room.getId());
         logger.info("=== 초대코드로 룸 조회 API 응답 ===");
         logger.info("룸 ID: {}", response.get("roomId"));
         
